@@ -1,0 +1,32 @@
+import com.redis._
+
+object Main extends App {
+
+	val redis = new RedisClient("localhost", 6379)
+
+	val stop = Set("a", "abbastanza", "accidenti", "ad", "adesso", "affinche", "agli", "ahime", "ahimÃ¨", "ai", "al", "alcuna", "alcuni", "alcuno", "all", "alla", "alle", "allo", "altri", "altrimenti", "altro", "altrui", "anche", "ancora", "anni", "anno", "ansa", "assai", "attesa", "avanti", "avendo", "avente", "aver", "avere", "avete", "aveva", "avuta", "avute", "avuti", "avuto", "basta", "bene", "benissimo", "berlusconi", "brava", "bravo", "c", "casa", "caso", "cento", "certa", "certe", "certi", "certo", "che", "chi", "chicchessia", "chiunque", "ci", "ciascuna", "ciascuno", "cima", "cio", "ciÃ²", "cioe", "cioÃ¨", "circa", "citta", "cittÃ ", "codesta", "codesti", "codesto", "cogli", "coi", "col", "colei", "coll", "coloro", "colui", "come", "con", "concernente", "consiglio", "contro", "cortesia", "cos", "cosa", "cosi", "cosÃ¬", "cui", "d", "da", "dagli", "dai", "dal", "dall", "dalla", "dalle", "dallo", "davanti", "degli", "dei", "del", "dell", "della", "delle", "dello", "dentro", "detto", "deve", "di", "dice", "dietro", "dire", "dirimpetto", "dopo", "dove", "dovra", "dovrÃ ", "due", "dunque", "durante", "e", "Ã¨", "ecco", "ed", "egli", "ella", "eppure", "era", "erano", "esse", "essendo", "esser", "essere", "essi", "ex", "fa", "fare", "fatto", "favore", "fin", "finalmente", "finche", "fine", "fino", "forse", "fra", "fuori", "gia", "giÃ ", "giacche", "giorni", "giorno", "gli", "gliela", "gliele", "glieli", "glielo", "gliene", "governo", "grande", "grazie", "gruppo", "ha", "hai", "hanno", "ho", "i", "ieri", "il", "improvviso", "in", "infatti", "insieme", "intanto", "intorno", "invece", "io", "l", "la", "lÃ ", "lavoro", "le", "lei", "li", "lo", "lontano", "loro", "lui", "lungo", "ma", "macche", "magari", "mai", "male", "malgrado", "malissimo", "me", "medesimo", "mediante", "meglio", "meno", "mentre", "mesi", "mezzo", "mi", "mia", "mie", "miei", "mila", "miliardi", "milioni", "ministro", "mio", "moltissimo", "molto", "mondo", "nazionale", "ne", "negli", "nei", "nel", "nell", "nella", "nelle", "nello", "nemmeno", "neppure", "nessuna", "nessuno", "niente", "no", "noi", "non", "nondimeno", "nostra", "nostre", "nostri", "nostro", "nulla", "nuovo", "o", "od", "oggi", "ogni", "ognuna", "ognuno", "oltre", "oppure", "ora", "ore", "osi", "ossia", "paese", "parecchi", "parecchie", "parecchio", "parte", "partendo", "peccato", "peggio", "per", "perche", "perchÃ¨", "percio", "perciÃ²", "perfino", "pero", "perÃ²", "persone", "piedi", "pieno", "piglia", "piu", "piÃ¹", "po", "pochissimo", "poco", "poi", "poiche", "press", "prima", "primo", "proprio", "puo", "puÃ²", "pure", "purtroppo", "qualche", "qualcuna", "qualcuno", "quale", "quali", "qualunque", "quando", "quanta", "quante", "quanti", "quanto", "quantunque", "quasi", "quattro", "quel", "quella", "quelli", "quello", "quest", "questa", "queste", "questi", "questo", "qui", "quindi", "riecco", "salvo", "sara", "sarÃ ", "sarebbe", "scopo", "scorso", "se", "secondo", "seguente", "sei", "sempre", "senza", "si", "sia", "siamo", "siete", "solito", "solo", "sono", "sopra", "sotto", "sta", "staranno", "stata", "state", "stati", "stato", "stesso", "su", "sua", "successivo", "sue", "sugli", "sui", "sul", "sull", "sulla", "sulle", "sullo", "suo", "suoi", "tale", "talvolta", "tanto", "te", "tempo", "ti", "torino", "tra", "tranne", "tre", "troppo", "tu", "tua", "tue", "tuo", "tuoi", "tutta", "tuttavia", "tutte", "tutti", "tutto", "uguali", "un", "una", "uno", "uomo", "va", "vale", "varia", "varie", "vario", "verso", "vi", "via", "vicino", "visto", "vita", "voi", "volta", "vostra", "vostre", "vostri", "vostro", "a", "adesso", "ai", "al", "alla", "allo", "allora", "altre", "altri", "altro", "anche", "ancora", "avere", "aveva", "avevano", "ben", "buono", "che", "chi", "cinque", "comprare", "con", "consecutivi", "consecutivo", "cosa", "cui", "da", "del", "della", "dello", "dentro", "deve", "devo", "di", "doppio", "due", "e", "ecco", "fare", "fine", "fino", "fra", "gente", "giu", "ha", "hai", "hanno", "ho", "il", "indietro	invece", "io", "la", "lavoro", "le", "lei", "lo", "loro", "lui", "lungo", "ma", "me", "meglio", "molta", "molti", "molto", "nei", "nella", "no", "noi", "nome", "nostro", "nove", "nuovi", "nuovo", "o", "oltre", "ora", "otto", "peggio", "pero", "persone", "piu", "poco", "primo", "promesso", "qua", "quarto", "quasi", "quattro", "quello", "questo", "qui", "quindi", "quinto", "rispetto", "sara", "secondo", "sei", "sembra	sembrava", "senza", "sette", "sia", "siamo", "siete", "solo", "sono", "sopra", "soprattutto", "sotto", "stati", "stato", "stesso", "su", "subito", "sul", "sulla", "tanto", "te", "tempo", "terzo", "tra", "tre", "triplo", "ultimo", "un", "una", "uno", "va", "vai", "voi", "volte", "vostro")
+
+	val text = """Con l'aumentare delle minacce che colpiscono il sistema operativo Android di Google, l'argomento della sicurezza è di sempre maggior importanza all'interno dello scenario mobile negli ultimi tempi. Per seguire questo trend in maniera attiva, Samsung ha deciso di pubblicare un nuovo blog nel quale verranno raccolti tutti i dettagli relativi agli aggiornamenti dedicati alla sicurezza dei propri smartphone. Oltre a ciò sarà anche possibile consultare la lista dei report sottoposti e riconosciuti dalla casa sud coreana, accompagnati da una descrizione della falla segnalata.
+
+Il blog si chiama Samsung Mobile Security Blog e, almeno per il momento, risulta molto scarno e privo di qualsiasi supporto a RSS, quindi sarà necessario visitarlo di tanto in tanto per ottenere gli ultimi dettagli. Probabilmente si tratta di una prima versione ancora molto scarna che verrà migliorata in seguito che intanto potete consultare tramite il seguente link."""
+
+	def getWord(w: String) = redis.lrange(w, 0, -1) match {
+		case Some(xs) => xs.flatten
+		case None => Seq()
+	}
+	// 1-grams (words)
+	val m = text.split("""[\s\p{Punct}]+""") filterNot (stop contains _.toLowerCase)
+
+	// 2-grams
+	// val m = text.split("""[\s\p{Punct}]+""") sliding 2 map { _ mkString " " } toList
+	
+	m foreach { w => 
+		val gw = getWord(w)
+		println(s"$w -> $gw")
+	}
+
+	val wds = m map getWord flatten
+
+	println (   wds.groupBy(identity).mapValues(_.length).toSeq.sortBy{ case (k,v) => -v }    )
+
+}
