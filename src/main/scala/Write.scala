@@ -15,37 +15,31 @@ import com.redis._
 
 import com.scalawilliam.xs4s.elementprocessor.XmlStreamElementProcessor
 
-object Write {
+object Write extends App {
 
 	def groupRegex(lines: Seq[String], pat: String): List[(String, Seq[String])] = {
 		if (lines.isEmpty) return Nil
 		val header = lines.head
 		val (group, rest) = lines.tail span (x => !(x matches pat) )
-		(header -> group) +: groupRegex(rest, pat)		
+		(header -> group) +: groupRegex(rest, pat)
 	}
+
+	case class Word(plural: Option[String], cats: Seq[String])
 
 	def parseText(xs: String) = {
 
-		val chapters = groupRegex(xs.lines.toSeq.tail, "==.*==")
-		val it = chapters.head._2.mkString("\n")
+		// val chapters = groupRegex(xs.lines.toSeq.tail, "==.*==")
+		// val it = chapters.head._2.mkString("\n")
 
-		val pat = """\{\{[Tt]erm\|(\w*)\|it\}\}""".r
-		pat.findAllMatchIn(xs) map {_ group 1} toList
+		val cats = """\{\{[Tt]erm\|(\w*)\|it\}\}""".r.findAllMatchIn(xs) map {_ group 1} toList
 
-		// val pars = groupRegex(it, """\{\{.*\}\}""")
-		// println(pars.head._2)
+		val plural = """\{\{Linkp\|(\w*)\}\}""".r.findFirstMatchIn(xs) map {_ group 1}
 
+		Word(plural, cats)
 
-		// val it = xs.split("==.*==")(1).trim
-		// val (tpe :: meta :: defs) = it.lines.toList 
-		// Word(
-		// 	tpe = tpe,
-		// 	meta = meta,
-		// 	defs = defs takeWhile ( _.startsWith("#") )
-		// )
 	}
 
-	val file = "/opt/scala-wiki/wiktionary.xml"
+	val file = "/opt/scala-wiki/data/wiktionary.xml"
 
 	val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
 
@@ -62,59 +56,24 @@ object Write {
 	val redis = new RedisClient("localhost", 6379)
 
 	pages foreach { page =>
+
 		val title = (page \\ "title").text
 		// println(title)
 
 		val text = (page \\ "text").text
 			// println (text)
 
-		if (title contains "evasione") println(text)
+		Try(parseText(text)) match {
+			case Success(Word(plural, cats)) if cats.nonEmpty => 
+				cats foreach { e => redis.lpush(title, e) }
+				plural.foreach { pl =>
+					cats foreach { e => redis.lpush(pl, e) }
+				}
 
-		// Try(parseText(text)) match {
-		// 	case Success(c) if c.nonEmpty => c foreach { e => redis.lpush(title, e) }
-		// 	case otherwise => // nothing
-		// }
+			case otherwise => // nothing
+		}
 
 
 	}
 
-	// import scala.pickling.Defaults._
-	// import scala.pickling.binary._
-
-	// val m = pages collect Function.unlift({ page =>
-	// 	val title = (page \\ "title").text
-	// 	// println(title)
-
-	// 	val text = (page \\ "text").text
-	// 		// println (text)
-
-	// 	Try(parseText(text)) match {
-	// 		case Success(c) if c.nonEmpty => Some(title -> c)
-	// 		case otherwise => None
-	// 	}
-
-
-	// }) toList
-
-	// println (m.getClass)
-
-	// import java.nio.file._
-	// Files.write(Paths.get("words.data"), m.pickle.value)
-
-
-
-	// pages foreach { page =>
-	// 	val title = (page \\ "title").text
-	// 	// println(title)
-	// 	if (title == "ricetta"){
-
-	// 		val text = (page \\ "text").text
-	// 		println (text)
-
-	// 		println (parseText(text))
-
-	// 	}
-	// }
-
-	
 }
