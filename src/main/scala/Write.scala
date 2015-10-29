@@ -15,65 +15,166 @@ import com.redis._
 
 import com.scalawilliam.xs4s.elementprocessor.XmlStreamElementProcessor
 
-object Write extends App {
+// object WikiParser {
 
-	def groupRegex(lines: Seq[String], pat: String): List[(String, Seq[String])] = {
-		if (lines.isEmpty) return Nil
-		val header = lines.head
-		val (group, rest) = lines.tail span (x => !(x matches pat) )
-		(header -> group) +: groupRegex(rest, pat)
-	}
+//   def enumerate(file: String) = 
 
-	case class Word(plural: Option[String], cats: Seq[String])
+// }
 
-	def parseText(xs: String) = {
 
-		// val chapters = groupRegex(xs.lines.toSeq.tail, "==.*==")
-		// val it = chapters.head._2.mkString("\n")
+object WriteWiktionary extends App {
 
-		val cats = """\{\{[Tt]erm\|(\w*)\|it\}\}""".r.findAllMatchIn(xs) map {_ group 1} toList
+  def groupRegex(lines: Seq[String], pat: String): List[(String, Seq[String])] = {
+    if (lines.isEmpty) return Nil
+    val header = lines.head
+    val (group, rest) = lines.tail span (x => !(x matches pat) )
+    (header -> group) +: groupRegex(rest, pat)
+  }
 
-		val plural = """\{\{Linkp\|(\w*)\}\}""".r.findFirstMatchIn(xs) map {_ group 1}
+  case class Word(plural: Option[String], cats: Seq[String])
 
-		Word(plural, cats)
+  def parseText(xs: String) = {
 
-	}
+    // val chapters = groupRegex(xs.lines.toSeq.tail, "==.*==")
+    // val it = chapters.head._2.mkString("\n")
 
-	val file = "/opt/scala-wiki/data/wiktionary.xml"
+    val cats = """\{\{[Tt]erm\|(\w*)\|it\}\}""".r.findAllMatchIn(xs) map {_ group 1} toList
 
-	val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
+    val plural = """\{\{Linkp\|(\w*)\}\}""".r.findFirstMatchIn(xs) map {_ group 1}
 
-	import XmlStreamElementProcessor.IteratorCreator._
+    Word(plural, cats)
+
+  }
+
+  val file = "./data/wiktionary.xml"
+
+  val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
+
+  import XmlStreamElementProcessor.IteratorCreator._
   val pages = splitter.processInputStream(new FileInputStream(file))
 
-  val patata = Source.fromFile("/opt/scala-wiki/patata.txt").mkString
+  val redis = new RedisClient("localhost", 6379)
 
-	println (parseText(patata))
+  pages foreach { page =>
 
+    val title = (page \\ "title").text
+    // println(title)
 
-	val parser = new WikitextParser(new SimpleParserConfig)
+    val text = (page \\ "text").text
+      // println (text)
 
-	val redis = new RedisClient("localhost", 6379)
+    Try(parseText(text)) match {
+      case Success(Word(plural, cats)) if cats.nonEmpty => 
+        cats foreach { e => redis.lpush(title, e) }
+        plural.foreach { pl =>
+          cats foreach { e => redis.lpush(pl, e) }
+        }
 
-	pages foreach { page =>
-
-		val title = (page \\ "title").text
-		// println(title)
-
-		val text = (page \\ "text").text
-			// println (text)
-
-		Try(parseText(text)) match {
-			case Success(Word(plural, cats)) if cats.nonEmpty => 
-				cats foreach { e => redis.lpush(title, e) }
-				plural.foreach { pl =>
-					cats foreach { e => redis.lpush(pl, e) }
-				}
-
-			case otherwise => // nothing
-		}
+      case otherwise => // nothing
+    }
 
 
-	}
+  }
+
+}
+
+
+object WriteWiki extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("pages")
+
+  coll.ensureIndex(Doc("title" -> 1), "title", true)
+
+  val file = "./data/wikipedia.xml"
+
+  val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
+
+  import XmlStreamElementProcessor.IteratorCreator._
+  val pages = splitter.processInputStream(new FileInputStream(file))
+
+  pages foreach { page =>
+
+    val title = (page \\ "title").text
+    // println(title)
+
+    val text = (page \\ "text").text
+      // println (text)
+
+    if (!(title contains ":")){
+      coll.insert(Doc("title" -> title, "text" -> text))
+    }
+
+
+    // if (title contains "Ancelotti")
+    //   println(page)
+
+    // Try(parseText(text)) match {
+    //  case Success(Word(plural, cats)) if cats.nonEmpty => 
+    //    cats foreach { e => redis.lpush(title, e) }
+    //    plural.foreach { pl =>
+    //      cats foreach { e => redis.lpush(pl, e) }
+    //    }
+
+    //  case otherwise => // nothing
+    // }
+
+
+  }
+
+}
+
+object ExtractCategoriesWiki extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("pages")
+
+  coll.ensureIndex(Doc("title" -> 1), "title", true)
+
+  coll.find(Doc("title" -> "Carlo Ancelotti")) foreach { page =>
+
+    val id = page.getAs[ObjectId]("_id").get
+
+    val title = page.getAs[String]("title").get
+    val text = page.getAs[String]("text").get
+    // println(title)
+
+    // println(text)
+
+    // def findMatches(pat)
+
+    implicit class RichString(s: String) {
+      import scala.util.matching.Regex
+      def findMatches(pat: Regex) = pat.findAllMatchIn(s) map {_ group 1} toList
+    }
+
+    val cats = text findMatches """\[\[Categoria:(.*)\]\]""".r
+
+    coll.update(Doc("_id" -> id), Doc("$set" -> Doc("categories" -> cats)))
+
+
+
+
+    // if (title contains "Ancelotti")
+    //   println(page)
+
+    // Try(parseText(text)) match {
+    //   case Success(Word(plural, cats)) if cats.nonEmpty => 
+    //     cats foreach { e => redis.lpush(title, e) }
+    //     plural.foreach { pl =>
+    //       cats foreach { e => redis.lpush(pl, e) }
+    //     }
+
+    //   case otherwise => // nothing
+    // }
+
+
+  }
 
 }

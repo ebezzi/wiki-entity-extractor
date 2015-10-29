@@ -2,8 +2,6 @@ name := """scala-wiki"""
 
 version := "1.0"
 
-scalaVersion := "2.11.6"
-
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor" % "2.3.11",
   "com.typesafe.akka" %% "akka-testkit" % "2.3.11" % "test",
@@ -26,3 +24,9 @@ libraryDependencies += "org.scala-lang.modules" %% "scala-pickling" % "0.10.1"
 libraryDependencies ++= Seq(
     "net.debasishg" %% "redisclient" % "3.0"
 )
+
+resolvers += "pico" at "http://reposerver/maven/"
+
+libraryDependencies += "eu.picoweb" %% "spider-link-consumer" % "1.1-SNAPSHOT"
+
+libraryDependencies += "org.mongodb" %% "casbah" % "2.8.2"
