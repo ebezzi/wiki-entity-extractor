@@ -15,12 +15,17 @@ import com.redis._
 
 import com.scalawilliam.xs4s.elementprocessor.XmlStreamElementProcessor
 
-// object WikiParser {
+object WikiParser {
 
-//   def enumerate(file: String) = 
+  def enumerate(file: String) = {
+    val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
 
-// }
+    import XmlStreamElementProcessor.IteratorCreator._
+    splitter.processInputStream(new FileInputStream(file))
 
+  }
+
+}
 
 object WriteWiktionary extends App {
 
@@ -46,29 +51,24 @@ object WriteWiktionary extends App {
 
   }
 
-  val file = "./data/wiktionary.xml"
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("words")
 
-  val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
+  def insert(word: String, categories: Seq[String]) = 
+    coll.update(Doc("word" -> word), Doc("$addToSet" -> Doc("categories" -> categories)), true, false)
 
-  import XmlStreamElementProcessor.IteratorCreator._
-  val pages = splitter.processInputStream(new FileInputStream(file))
-
-  val redis = new RedisClient("localhost", 6379)
-
-  pages foreach { page =>
+  WikiParser.enumerate("./data/wiktionary.xml") foreach { page =>
 
     val title = (page \\ "title").text
-    // println(title)
-
     val text = (page \\ "text").text
-      // println (text)
 
     Try(parseText(text)) match {
       case Success(Word(plural, cats)) if cats.nonEmpty => 
-        cats foreach { e => redis.lpush(title, e) }
-        plural.foreach { pl =>
-          cats foreach { e => redis.lpush(pl, e) }
-        }
+        insert(title, cats)
+        plural.foreach { pl => insert(pl, cats) }
 
       case otherwise => // nothing
     }
@@ -79,7 +79,7 @@ object WriteWiktionary extends App {
 }
 
 
-object WriteWiki extends App {
+object WriteWikipedia extends App {
 
   import com.mongodb.casbah.Imports._
   import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
@@ -89,14 +89,7 @@ object WriteWiki extends App {
 
   coll.ensureIndex(Doc("title" -> 1), "title", true)
 
-  val file = "./data/wikipedia.xml"
-
-  val splitter = XmlStreamElementProcessor.collectElements { _.last == "page" }
-
-  import XmlStreamElementProcessor.IteratorCreator._
-  val pages = splitter.processInputStream(new FileInputStream(file))
-
-  pages foreach { page =>
+  WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
 
     val title = (page \\ "title").text
     // println(title)
@@ -109,17 +102,38 @@ object WriteWiki extends App {
     }
 
 
-    // if (title contains "Ancelotti")
-    //   println(page)
+  }
 
-    // Try(parseText(text)) match {
-    //  case Success(Word(plural, cats)) if cats.nonEmpty => 
-    //    cats foreach { e => redis.lpush(title, e) }
-    //    plural.foreach { pl =>
-    //      cats foreach { e => redis.lpush(pl, e) }
-    //    }
+}
 
-    //  case otherwise => // nothing
+object WriteRedirects extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("redirects")
+
+  coll.ensureIndex(Doc("from" -> 1), "from", true)
+  coll.ensureIndex(Doc("fromLower" -> 1), "fromLower", false)
+
+  WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
+
+    val title = (page \\ "title").text
+    // println(title)
+
+    val text = (page \\ "text").text
+      // println (text)
+
+    val redirect = (page \\ "redirect").headOption flatMap { x => x attribute "title" } map { _.text }
+
+    redirect foreach { to =>
+      coll.insert(Doc("from" -> title, "fromLower" -> title.toLowerCase, "to" -> to))
+    }
+
+
+    // if (!(title contains ":")){
+    //   coll.insert(Doc("title" -> title, "text" -> text))
     // }
 
 
@@ -127,27 +141,113 @@ object WriteWiki extends App {
 
 }
 
+object WriteDisambiguation extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("redirects")
+
+  // coll.ensureIndex(Doc("from" -> 1), "from", true)
+  // coll.ensureIndex(Doc("fromLower" -> 1), "fromLower", false)
+
+  WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
+
+    val title = (page \\ "title").text
+    // println(title)
+
+    val text = (page \\ "text").text
+
+    if (text startsWith "{{disambigua}}")
+      println (page)
+
+
+    // if (!(title contains ":")){
+    //   coll.insert(Doc("title" -> title, "text" -> text))
+    // }
+
+
+  }
+
+}
+
+object WritePortals extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("entities")
+
+  // coll.ensureIndex(Doc("from" -> 1), "from", true)
+  // coll.ensureIndex(Doc("fromLower" -> 1), "fromLower", false)
+
+  WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
+
+    val title = (page \\ "title").text
+    // println(title)
+
+    val text = (page \\ "text").text
+
+    val portals = """\{\{Portale\|([|\w]*)\}\}""".r.findAllMatchIn(text) map {_ group 1} toList match {
+      case h :: t => h split '|' toList
+      case other => Nil
+    }
+
+    if (portals.nonEmpty)
+      coll.update(Doc("entity" -> title), Doc("$set" -> Doc("portals" -> portals)))
+
+
+  }
+
+}
+
+// object ExtractCategoriesWiki extends App {
+
+//   import com.mongodb.casbah.Imports._
+//   import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+//   val client = MongoClient("localhost", 27017)
+//   val db = client("wikipedia")
+//   val dest = db("entities")
+
+//   coll.ensureIndex(Doc("entity" -> 1), "entity", true)
+
+//   WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
+
+//     val title = (page \\ "title").text
+//     val text = (page \\ "text").text
+
+//     implicit class RichString(s: String) {
+//       import scala.util.matching.Regex
+//       def findMatches(pat: Regex) = pat.findAllMatchIn(s) map {_ group 1} toList
+//     }
+
+//     val cats = text findMatches """\[\[Categoria:(.*)\]\]""".r
+
+//     coll.insert(Doc("entity" -> title, "categories" -> cats))
+
+//   }
+
+// }
+
 object ExtractCategoriesWiki extends App {
 
   import com.mongodb.casbah.Imports._
   import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
   val client = MongoClient("cannobio", 27017)
   val db = client("wikipedia")
-  val coll = db("pages")
+  val source = db("pages")
+  val dest = db("entities")
 
-  coll.ensureIndex(Doc("title" -> 1), "title", true)
+  dest.ensureIndex(Doc("entity" -> 1), "entity", true)
 
-  coll.find(Doc("title" -> "Carlo Ancelotti")) foreach { page =>
+  source.find() foreach { page =>
 
-    val id = page.getAs[ObjectId]("_id").get
+    // val id = page.getAs[ObjectId]("_id").get
 
     val title = page.getAs[String]("title").get
     val text = page.getAs[String]("text").get
-    // println(title)
-
-    // println(text)
-
-    // def findMatches(pat)
 
     implicit class RichString(s: String) {
       import scala.util.matching.Regex
@@ -156,25 +256,65 @@ object ExtractCategoriesWiki extends App {
 
     val cats = text findMatches """\[\[Categoria:(.*)\]\]""".r
 
-    coll.update(Doc("_id" -> id), Doc("$set" -> Doc("categories" -> cats)))
+    dest.insert(Doc("entity" -> title, "categories" -> cats))
+
+  }
+
+}
+
+object Bah extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val source = db("categories")
+  val dest = db("entities")
+
+  dest.ensureIndex(Doc("entity" -> 1), "entity", true)
+
+  WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
+
+    val title = (page \\ "title").text
+    val text = (page \\ "text").text
+    val id = (page \ "id").text.toInt
+
+    // println (id)
+
+    val cats = source.find(Doc("id" -> id)) collect Function.unlift( d => d.getAs[String]("category") ) toList
+
+    if (cats.nonEmpty)
+      dest.insert(Doc("id" -> id, "entity" -> title, "categories" -> cats))
+    
 
 
-
-
-    // if (title contains "Ancelotti")
-    //   println(page)
-
-    // Try(parseText(text)) match {
-    //   case Success(Word(plural, cats)) if cats.nonEmpty => 
-    //     cats foreach { e => redis.lpush(title, e) }
-    //     plural.foreach { pl =>
-    //       cats foreach { e => redis.lpush(pl, e) }
-    //     }
-
-    //   case otherwise => // nothing
+    // if (title contains "David Gilmour"){
+    //   println (page)
     // }
 
 
   }
+
+}
+
+object Normalize extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val dest = db("entities")
+
+  dest.ensureIndex(Doc("entity" -> 1), "entity", true)
+  dest.ensureIndex(Doc("entityLower" -> 1), "entityLower")
+
+  dest.find() foreach { page =>
+
+    val entity = page.getAs[String]("entity").get
+    dest.update(Doc("entity" -> entity), Doc("$set" -> Doc("entityLower" -> entity.toLowerCase)))
+
+  }
+
 
 }
