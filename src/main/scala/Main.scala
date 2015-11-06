@@ -33,7 +33,7 @@ class EntityExtractor {
     //   println(s"$w -> $gw")
     // }
 
-    val words = m map getWord flatten
+    val words = m flatMap getWord 
 
     words
       .groupBy(identity)
@@ -123,89 +123,162 @@ class AnalyticEntityExtractor {
 
   }
 
+  implicit class RichDoc(doc: Doc) {
+    def str(key: String) = doc.getAs[String](key).get
+    def strs(key: String) = doc.getAsOrElse[List[String]](key, nil)
+  }
+
+  implicit class RichBaseDoc(doc: BasicDBObject) {
+    def str(key: String) = doc.getAs[String](key).get
+    def strs(key: String) = doc.getAsOrElse[List[String]](key, nil)
+  }
+
   case class Match(ng: NGram, categories: Seq[String], portals: Seq[String])
 
+  def mkCategories(xs: Seq[String]) = xs
+    .filterNot { _ startsWith "Voci" }
+    .filterNot { _ startsWith "Collegamento" }
+    .filterNot { _ startsWith "Aggiungere" }
+    .filterNot { _ contains "_-_" } // usually crap
+    .filterNot { _ contains "Wiki" } // meta categories
+    .filterNot { _ contains "Aggiornare" } // meta categories
+    .filterNot { _ == "Informazioni_senza_fonte" }
+    .filterNot { _ == "BioBot" }
+
+  def blacklistCategories(xs: Seq[String]) = 
+    (xs exists { c => c startsWith "EP"}) || 
+    (xs exists { c => c startsWith "Brani_Musicali"})
+
+  case object Match {
+    def fromDoc(ng: NGram, doc: Doc) = {
+      val categories = mkCategories(doc strs "categories")
+
+      if (blacklistCategories(categories))
+        None
+      else
+        Some(Match(ng, categories, doc strs "portals"))
+    }
+  }
+
   def tokenize(text: String, n: Int) : Seq[NGram] = n match {
-    case 1 => text.split("""[\s\p{Punct}]+""") filterNot (stop contains _.toLowerCase) map {x => NGram(Seq(x)) } toList
-    case _ => text.split("""[\s\p{Punct}]+""") sliding n map {x => NGram(x)} toList
+    case 1 => text.split("""[\s\p{Punct}’]+""") filterNot (stop contains _.toLowerCase) filterNot {_ forall(_.isDigit)} map {x => NGram(Seq(x)) } toList
+    case _ => text.split("""[\s\p{Punct}’]+""") sliding n map {x => NGram(x)} toList
   }
     
-  def getWord(w: String, lower: Boolean = false) = {
+  def getEntityDoc(k: String, lower: Boolean = false) = {
 
     val key = lower ? "entityLower" | "entity"
-    val word = lower ? w.toLowerCase | w 
+    val word = lower ? k.toLowerCase | k
 
-    coll.findOne(Doc(key -> word)) match {
-      case Some(xs) => xs.getAsOrElse[List[String]]("categories", Nil)
-      case None => Nil
-    }
+    coll.findOne(Doc(key -> word))
   } 
 
-  // def getEntity(ng: NGram, lower: Boolean = false) : Seq[String] = 
-  //   getEntity(ng.show, lower)
+  def getEntity(ng: NGram) : Option[Match] = {
 
-  def getEntity(w: String, lower: Boolean = false) : Seq[String] = {
+    val lower = false
 
-    val key = lower ? "entityLower" | "entity"
     val keyRdr = lower ? "fromLower" | "from"
-    val word = lower ? w.toLowerCase | w 
+    val word = lower ? ng.show.toLowerCase | ng.show 
 
-    coll.findOne(Doc(key -> word)) match {
-      case Some(xs) => 
-        xs.getAsOrElse[List[String]]("categories", Nil)
-      case None => 
-        rdr.findOne(Doc(keyRdr -> word)) collect { case wd => getWord(wd.getAs[String]("to").get) } getOrElse Nil
+    getEntityDoc(word, lower) match {
+      case Some(doc) => 
+        Match fromDoc (ng, doc)
+      case None =>
+        rdr.findOne(Doc(keyRdr -> word)) flatMap { wd => getEntityDoc(wd.getAs[String]("to").get) } flatMap { doc => Match fromDoc (ng, doc) }
     }
 
   }
 
-  def accumulateTokens(text: String) = {
+  def getTop(xs: Seq[String]) = xs
+    .map { _.toLowerCase }
+    .groupBy(identity)
+    .mapValues(_.length)
+    .toList
+    .sortBy{ case (k,v) => -v }
 
-  }
-
-  def extract(title: String, text: String) = {
+  def extractPortals(text: String) = {
 
     import eu.picoweb.commons.ScalaSoup
     import eu.picoweb.commons.ScalaSoup._
     // val firstPar = ScalaSoup clean ScalaSoup.parse(text).select("p").head.toString
 
-    // println (firstPar)
+    val threeGrams = tokenize(text, 3) collect Function.unlift(getEntity) 
+    val bigrams = tokenize(text, 2) collect Function.unlift(getEntity) filterNot { m => threeGrams map {_.ng} exists m.ng.contained }
+    val onegrams = tokenize(text, 1) collect Function.unlift(getEntity) filterNot { m => threeGrams map {_.ng} exists m.ng.contained } filterNot { m => bigrams map {_.ng} exists m.ng.contained }
 
-    // tokenize(text, 2) foreach { w =>
+    val ngrams = (threeGrams ++ bigrams ++ onegrams)
+      // .filterNot { _.ng.isNumber }
 
-      // println (s"$w ${containsStop(w)}")
+    ngrams foreach { m => println(s"\t$m") }
 
-      // val lower = true
+    getTop (ngrams flatMap { _.portals })
 
-      // val m = getEntity(w.show, lower)
-      // if (m.nonEmpty)
-      //   println (s"Matched: $w -> $m")
+  }
 
-    // }
+  def analyze(text: String) = {
 
-    c
+    // println (tokenize(text, 1))
 
-    // val fourGrams = tokenize(text, 4) filter { tok => getEntity(tok.show).nonEmpty }
-    val threeGrams = tokenize(text, 3) filter { tok => getEntity(tok.show).nonEmpty } 
-    val bigrams = tokenize(text, 2) filter { tok => getEntity(tok.show).nonEmpty } filterNot { ng => threeGrams exists ng.contained }
-    val onegrams = tokenize(text, 1) filter { tok => getEntity(tok.show).nonEmpty } filterNot { ng => threeGrams exists ng.contained } filterNot { ng => bigrams exists ng.contained }
+    val threeGrams = tokenize(text, 3) collect Function.unlift(getEntity) 
+    val bigrams = tokenize(text, 2) collect Function.unlift(getEntity) filterNot { m => threeGrams map {_.ng} exists m.ng.contained }
+    val onegrams = tokenize(text, 1) collect Function.unlift(getEntity) filterNot { m => threeGrams map {_.ng} exists m.ng.contained } filterNot { m => bigrams map {_.ng} exists m.ng.contained }
 
-    // fourGrams foreach println
-    threeGrams foreach println
-    bigrams foreach println
-    onegrams foreach println
+    (threeGrams ++ bigrams ++ onegrams) foreach { m => println(s"\t$m") }
+
+  }
+
+  def extract(title: String, description: Option[String], text: String) = {
+
+    val portalsTitle = extractPortals(title)
+    println (s"Title: $portalsTitle")
+
+    println()
+
+    val portalsText = extractPortals(text)
+    println (s"Text: $portalsText")
+
+    println()
+
+    if (description.isDefined) {
+      val portalsDescription = extractPortals(description.get)
+      println (s"Description: $portalsDescription")
+    }
+
+  }
+
+  def extract2(title: String, text: String) = {
+
+    val total = s"$title $text"
+
+    // println (total)
+
+    val threeGrams = tokenize(total, 3) collect Function.unlift(getEntity) 
+    val bigrams = tokenize(total, 2) collect Function.unlift(getEntity) filterNot { m => threeGrams map {_.ng} exists m.ng.contained }
+    val onegrams = tokenize(total, 1) collect Function.unlift(getEntity) filterNot { m => threeGrams map {_.ng} exists m.ng.contained } filterNot { m => bigrams map {_.ng} exists m.ng.contained }
+
+    val ngrams = (threeGrams ++ bigrams ++ onegrams) //map { m => (m.ng, m) } toMap
+
+    def spot(ng: NGram) = 
+      ngrams filter { m => m.ng contains ng } headOption
 
 
+    val titleM = (tokenize(title, 3) ++ tokenize(title, 2) ++ tokenize(title, 1)) collect Function.unlift(spot) 
+    val textM = (tokenize(text, 3) ++ tokenize(text, 2) ++ tokenize(text, 1)) collect Function.unlift(spot) 
 
-    Seq()
+    val titleP = getTop (titleM flatMap { _.portals })
+    val textP = getTop (textM flatMap { _.portals })
 
-
-
+    println(s"Best matches for title: $titleP")
+    println(s"Best matches for text: $textP")
 
 
   }
 
+
 }
+
+// http://www.repubblica.it/salute/medicina/2015/11/06/news/leucemia_terapia_genica_cura_bimba_di_un_anno_malata_terminale-126735265/
+// 
 
 object Main extends App {
 
@@ -215,8 +288,15 @@ object Main extends App {
 
   val ee = new AnalyticEntityExtractor
 
-  Extractor extract args.head foreach { case Article(Some(title), Some(text), _, _, _, _, _, _) =>
-    ee extract (title, text) foreach println
+  Extractor extract args.head foreach { case Article(Some(title), Some(text), description, _, _, _, _, _) =>
+    println (s"Title: $title")
+    println ()
+    ee analyze (title)
+    println()
+    ee analyze (text)
+    println ()
+    ee extract2 (title, text)
+
   }
 
 
@@ -251,6 +331,37 @@ object AssignEntities extends App {
     // println (tags)
 
     coll.update(Doc("_id" -> id), Doc("$set" -> Doc("status.tags" -> tags)))
+  }
+
+}
+
+object TryEntities extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+
+  val ee = new AnalyticEntityExtractor
+
+  val client = MongoClient("cannobio", 27017)
+  val db = client("news")
+  val coll = db("articles")
+
+  // coll.find(Doc("type" -> "web", "_id" -> Doc("$gte" -> new ObjectId("562567e00000000000000000")))) foreach { article =>
+  coll.find(Doc("type" -> "web", "_id" -> Doc("$gte" -> new ObjectId("563a8df00000000000000000")))).sort(Doc("score" -> -1)) foreach { article =>
+
+    val id = article.getAs[ObjectId]("_id").get
+
+    val url = article.getAsOrElse[String]("url", "")
+
+    val title = article.getAsOrElse[String]("title", "")
+    val text = article.getAsOrElse[String]("text", "")
+
+    // val categories = ee.extract(s"$title $text")
+
+    val portals = ee.extractPortals(title)
+
+    println (s"$url: $portals")
+
   }
 
 }

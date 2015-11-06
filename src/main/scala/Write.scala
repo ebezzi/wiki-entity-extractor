@@ -172,6 +172,37 @@ object WriteDisambiguation extends App {
 
 }
 
+object Scan extends App {
+
+  import com.mongodb.casbah.Imports._
+  import com.mongodb.casbah.Imports.{MongoDBObject => Doc}
+  val client = MongoClient("cannobio", 27017)
+  val db = client("wikipedia")
+  val coll = db("redirects")
+
+  // coll.ensureIndex(Doc("from" -> 1), "from", true)
+  // coll.ensureIndex(Doc("fromLower" -> 1), "fromLower", false)
+
+  WikiParser.enumerate("./data/wikipedia.xml") foreach { page => 
+
+    val title = (page \\ "title").text
+    // println(title)
+
+    val text = (page \\ "text").text
+
+    if ("Portale:Portali" == title)
+      println(page)
+
+
+    // if (!(title contains ":")){
+    //   coll.insert(Doc("title" -> title, "text" -> text))
+    // }
+
+
+  }
+
+}
+
 object WritePortals extends App {
 
   import com.mongodb.casbah.Imports._
@@ -190,7 +221,7 @@ object WritePortals extends App {
 
     val text = (page \\ "text").text
 
-    val portals = """\{\{Portale\|([|\w]*)\}\}""".r.findAllMatchIn(text) map {_ group 1} toList match {
+    val portals = """\{\{[P|p]ortale\|([^\}]*)\}\}""".r.findAllMatchIn(text) map {_ group 1} toList match {
       case h :: t => h split '|' toList
       case other => Nil
     }
