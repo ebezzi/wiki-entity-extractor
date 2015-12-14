@@ -289,33 +289,31 @@ class AnalyticEntityExtractor {
 
     val textM = (tokenize(text, 3) ++ tokenize(text, 2) ++ tokenize(text, 1)) collect Function.unlift(spotExact) 
 
-    // Uncomment for tokens
-    // tokenize(title, 3) foreach println
 
-    println(s"Matches for title:")
-    titleM foreach println
+    // println(s"Matches for title:")
+    // titleM foreach println
 
-    println()
+    // println()
 
-    println(s"Matches for text:")
-    textM foreach println
+    // println(s"Matches for text:")
+    // textM foreach println
 
-    println()
+    // println()
 
-    println(s"lowercase 3-grams:")
-    tokenize(text, 3) filterNot { _.startsWithArticle} collect Function.unlift(x => getEntity(x, true)) foreach println
+    // println(s"lowercase 3-grams:")
+    // tokenize(text, 3) filterNot { _.startsWithArticle} collect Function.unlift(x => getEntity(x, true)) foreach println
 
-    println()
+    // println()
 
-    println(s"lowercase 2-grams:")
-    tokenize(text, 2) filterNot { _.startsWithArticle} collect Function.unlift(x => getEntity(x, true)) foreach println
+    // println(s"lowercase 2-grams:")
+    // tokenize(text, 2) filterNot { _.startsWithArticle} collect Function.unlift(x => getEntity(x, true)) foreach println
 
-    println()
+    // println()
 
-    println(s"lowercase 1-grams:")
-    tokenize(text, 1) collect Function.unlift(x => getEntity(x, true)) foreach println
+    // println(s"lowercase 1-grams:")
+    // tokenize(text, 1) collect Function.unlift(x => getEntity(x, true)) foreach println
 
-    println()
+    // println()
 
     getTop(mkPortals(textM flatMap { _.portals }) ++ mkPortals(titleM flatMap { _.portals }))
 
@@ -389,9 +387,19 @@ object AssignEntities extends App {
   val e = Doc("$exists" -> true)
   val ne = Doc("$exists" -> false)
 
+  // TODO: replace with LocalDateTime
+  import java.util._
+  val cal = new GregorianCalendar
+  cal.set(Calendar.HOUR_OF_DAY, 0) 
+  cal.set(Calendar.MINUTE, 0)
+  cal.set(Calendar.SECOND, 0)
+  val today = cal.getTime
+
+  val gte = Doc("$gte" -> new ObjectId(today))
+
   def assign() {
 
-    coll.find(Doc("type" -> "web", "status.tags" -> ne, "cluster" -> e)).sort(Doc("score" -> -1)) foreach { article =>
+    coll.find(Doc("type" -> "web", "status.tags" -> ne, "cluster" -> e, "_id" -> gte)).sort(Doc("score" -> -1)).limit(1000) foreach { article =>
 
       val id = article.getAs[ObjectId]("_id").get
 
