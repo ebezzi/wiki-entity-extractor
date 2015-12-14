@@ -27,10 +27,8 @@ libraryDependencies ++= Seq(
 
 resolvers += "pico" at "http://reposerver/maven/"
 
-libraryDependencies += "eu.picoweb" %% "spider-link-consumer" % "1.1-SNAPSHOT"
+libraryDependencies += "eu.picoweb" %% "spider-link-consumer" % "1.2-SNAPSHOT"
 
 libraryDependencies += "org.mongodb" %% "casbah" % "2.8.2"
 
 libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.1.4"
-
-libraryDependencies += "com.github.etaty" % "rediscala_2.11" % "1.5.0"
